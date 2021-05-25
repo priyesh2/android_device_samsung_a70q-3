@@ -64,6 +64,9 @@ TARGET_BOARD_PLATFORM_GPU := qcom-adreno612
 # Recovery
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/rootdir/etc/fstab.qcom
 
+# Security
+VENDOR_SECURITY_PATCH := 2021-03-01
+
 # SELinux
 BOARD_PLAT_PRIVATE_SEPOLICY_DIR += \
     $(DEVICE_PATH)/sepolicy/private
