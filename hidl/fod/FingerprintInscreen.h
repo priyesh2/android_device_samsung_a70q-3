@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The LineageOS Project
+ * Copyright (C) 2019 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,14 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef VENDOR_LINEAGE_BIOMETRICS_FINGERPRINT_INSCREEN_V1_0_FINGERPRINTINSCREEN_H
 #define VENDOR_LINEAGE_BIOMETRICS_FINGERPRINT_INSCREEN_V1_0_FINGERPRINTINSCREEN_H
 
 #include <vendor/lineage/biometrics/fingerprint/inscreen/1.0/IFingerprintInscreen.h>
 #include <vendor/samsung/hardware/biometrics/fingerprint/3.0/ISehBiometricsFingerprint.h>
-
-#include "samsung_fingerprint_inscreen.h"
 
 namespace vendor {
 namespace lineage {
@@ -58,9 +55,9 @@ class FingerprintInscreen : public IFingerprintInscreen {
 
   private:
     sp<ISehBiometricsFingerprint> mSehBiometricsFingerprintService;
-
     std::mutex mCallbackLock;
     sp<IFingerprintInscreenCallback> mCallback;
+    std::string mPreviousBrightness;
 
     static void requestResult(int retval, const hidl_vec<int8_t>& outBuf);
 };
