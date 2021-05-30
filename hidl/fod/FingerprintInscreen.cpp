@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The LineageOS Project
+ * Copyright (C) 2019 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,22 @@
 #define LOG_TAG "FingerprintInscreenService"
 
 #include "FingerprintInscreen.h"
-
 #include <android-base/logging.h>
 #include <hidl/HidlTransportSupport.h>
-
 #include <fstream>
+#include <cmath>
 #include <thread>
+
+#define FINGERPRINT_ACQUIRED_VENDOR 6
+
+#define BRIGHTNESS_PATH "/sys/class/backlight/panel0-backlight/brightness"
+#define TSP_CMD_PATH "/sys/class/sec/tsp/cmd"
+#define MASK_BRIGHTNESS_PATH "/sys/class/lcd/panel/mask_brightness"
+
+#define SEM_FINGER_STATE 22
+#define SEM_PARAM_PRESSED 2
+#define SEM_PARAM_RELEASED 1
+#define SEM_AOSP_FQNAME "android.hardware.biometrics.fingerprint@2.1::IBiometricsFingerprint"
 
 namespace vendor {
 namespace lineage {
@@ -38,41 +48,16 @@ namespace implementation {
 template <typename T>
 static void set(const std::string& path, const T& value) {
     std::ofstream file(path);
-
-    if (!file) {
-        PLOG(ERROR) << "Failed to open: " << path;
-        return;
-    }
-
-    LOG(DEBUG) << "write: " << path << " value: " << value;
-
-    file << value << std::endl;
-
-    if (!file) {
-        PLOG(ERROR) << "Failed to write: " << path << " value: " << value;
-    }
+    file << value;
 }
 
 template <typename T>
 static T get(const std::string& path, const T& def) {
     std::ifstream file(path);
-
-    if (!file) {
-        PLOG(ERROR) << "Failed to open: " << path;
-        return def;
-    }
-
     T result;
 
     file >> result;
-
-    if (file.fail()) {
-        PLOG(ERROR) << "Failed to read: " << path;
-        return def;
-    } else {
-        LOG(DEBUG) << "read: " << path << " value: " << result;
-        return result;
-    }
+    return file.fail() ? def : result;
 }
 
 static hidl_vec<int8_t> stringToVec(const std::string& str) {
@@ -85,67 +70,65 @@ static hidl_vec<int8_t> stringToVec(const std::string& str) {
     return vec;
 }
 
-void FingerprintInscreen::requestResult(int, const hidl_vec<int8_t>&) { }
-
 FingerprintInscreen::FingerprintInscreen() {
     mSehBiometricsFingerprintService = ISehBiometricsFingerprint::getService();
-#ifdef FOD_SET_RECT
-    set(TSP_CMD_PATH, FOD_SET_RECT);
-#endif
-    set(TSP_CMD_PATH, FOD_ENABLE);
-    set(MASK_BRIGHTNESS_PATH, FOD_MASK);
+    set(TSP_CMD_PATH, "set_fod_rect,426,1989,654,2217");
+    set(MASK_BRIGHTNESS_PATH, "319");
+    set(TSP_CMD_PATH, "fod_enable,1,1,0");
 }
 
-Return<void> FingerprintInscreen::onStartEnroll() { return Void(); }
+void FingerprintInscreen::requestResult(int, const hidl_vec<int8_t>&) {
+    // Ignore all results
+}
 
-Return<void> FingerprintInscreen::onFinishEnroll() { return Void(); }
+Return<void> FingerprintInscreen::onStartEnroll() {
+    return Void();
+}
 
-Return<void> FingerprintInscreen::onPress() { 
-    set(FP_GREEN_CIRCLE, "1");
+Return<void> FingerprintInscreen::onFinishEnroll() {
+    return Void();
+}
+
+Return<void> FingerprintInscreen::onPress() {
     std::thread([this]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(36));
-        mSehBiometricsFingerprintService->sehRequest(SEM_FINGER_STATE, 
+        std::this_thread::sleep_for(std::chrono::milliseconds(45));
+        mSehBiometricsFingerprintService->sehRequest(SEM_FINGER_STATE,
             SEM_PARAM_PRESSED, stringToVec(SEM_AOSP_FQNAME), FingerprintInscreen::requestResult);
     }).detach();
-    return Void(); 
+    return Void();
 }
 
-Return<void> FingerprintInscreen::onRelease() { 
-    mSehBiometricsFingerprintService->sehRequest(SEM_FINGER_STATE, 
+Return<void> FingerprintInscreen::onRelease() {
+    mSehBiometricsFingerprintService->sehRequest(SEM_FINGER_STATE,
         SEM_PARAM_RELEASED, stringToVec(SEM_AOSP_FQNAME), FingerprintInscreen::requestResult);
-    set(FP_GREEN_CIRCLE, "0");
-    return Void(); 
+    return Void();
 }
 
-Return<void> FingerprintInscreen::onShowFODView() { 
+Return<void> FingerprintInscreen::onShowFODView() {
     std::thread([]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
-        set(FOD_DIMMING_PATH, "1");
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }).detach();
-    return Void(); 
+    return Void();
 }
 
-Return<void> FingerprintInscreen::onHideFODView() { 
-    set(FP_GREEN_CIRCLE, "0");
-    set(FOD_DIMMING_PATH, "0");
-    return Void(); 
+Return<void> FingerprintInscreen::onHideFODView() {
+    return Void();
 }
 
 Return<bool> FingerprintInscreen::handleAcquired(int32_t acquiredInfo, int32_t vendorCode) {
     std::lock_guard<std::mutex> _lock(mCallbackLock);
-
     if (mCallback == nullptr) {
         return false;
     }
 
     if (acquiredInfo == FINGERPRINT_ACQUIRED_VENDOR) {
-        if (vendorCode == VENDORCODE_FINGER_DOWN) {
+        if (vendorCode == 10002) {
             Return<void> ret = mCallback->onFingerDown();
             if (!ret.isOk()) {
                 LOG(ERROR) << "FingerDown() error: " << ret.description();
             }
             return true;
-        } else if (vendorCode == VENDORCODE_FINGER_UP) {
+        } else if (vendorCode == 10001) {
             Return<void> ret = mCallback->onFingerUp();
             if (!ret.isOk()) {
                 LOG(ERROR) << "FingerUp() error: " << ret.description();
@@ -153,29 +136,45 @@ Return<bool> FingerprintInscreen::handleAcquired(int32_t acquiredInfo, int32_t v
             return true;
         }
     }
-
+    LOG(ERROR) << "acquiredInfo: " << acquiredInfo << ", vendorCode: " << vendorCode << "\n";
     return false;
 }
 
-Return<bool> FingerprintInscreen::handleError(int32_t, int32_t) { return false; }
+Return<bool> FingerprintInscreen::handleError(int32_t, int32_t) {
+    return false;
+}
 
-Return<void> FingerprintInscreen::setLongPressEnabled(bool) { return Void(); }
-
-Return<int32_t> FingerprintInscreen::getDimAmount(int32_t) { return 0; }
-
-Return<bool> FingerprintInscreen::shouldBoostBrightness() { return false; }
-
-Return<void> FingerprintInscreen::setCallback(const sp<IFingerprintInscreenCallback>& callback) {
-    mCallback = callback;
-
+Return<void> FingerprintInscreen::setLongPressEnabled(bool) {
     return Void();
 }
 
-Return<int32_t> FingerprintInscreen::getPositionX() { return FOD_SENSOR_X; }
+Return<int32_t> FingerprintInscreen::getDimAmount(int32_t cur_brightness) {
+    return (int32_t)(255 + ( -40.9291 * pow((double) cur_brightness, 0.3)));
+}
 
-Return<int32_t> FingerprintInscreen::getPositionY() { return FOD_SENSOR_Y; }
+Return<bool> FingerprintInscreen::shouldBoostBrightness() {
+    return false;
+}
 
-Return<int32_t> FingerprintInscreen::getSize() { return FOD_SENSOR_SIZE; }
+Return<void> FingerprintInscreen::setCallback(const sp<IFingerprintInscreenCallback>& callback) {
+    {
+        std::lock_guard<std::mutex> _lock(mCallbackLock);
+        mCallback = callback;
+    }
+    return Void();
+}
+
+Return<int32_t> FingerprintInscreen::getPositionX() {
+    return 435;
+}
+
+Return<int32_t> FingerprintInscreen::getPositionY() {
+    return 2025;
+}
+
+Return<int32_t> FingerprintInscreen::getSize() {
+    return 210;
+}
 
 }  // namespace implementation
 }  // namespace V1_0
