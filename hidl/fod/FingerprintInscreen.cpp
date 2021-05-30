@@ -156,7 +156,9 @@ Return<bool> FingerprintInscreen::handleError(int32_t, int32_t) { return false; 
 
 Return<void> FingerprintInscreen::setLongPressEnabled(bool) { return Void(); }
 
-Return<int32_t> FingerprintInscreen::getDimAmount(int32_t) { return 0; }
+Return<int32_t> FingerprintInscreen::getDimAmount(int32_t cur_brightness) {
+    return (int32_t)(255 + ( -40.9291 * pow((double) cur_brightness, 0.3)));
+}
 
 Return<bool> FingerprintInscreen::shouldBoostBrightness() { return false; }
 
