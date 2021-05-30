@@ -35,9 +35,8 @@
 #define SEM_PARAM_RELEASED 1
 
 #define TSP_CMD_PATH "/sys/class/sec/tsp/cmd"
-#define FP_GREEN_CIRCLE "/sys/class/lcd/panel/fp_green_circle"
 #define MASK_BRIGHTNESS_PATH "/sys/class/lcd/panel/mask_brightness"
-#define FOD_DIMMING_PATH "/sys/class/lcd/panel/fod_dimming"
+
 
 #define SEM_AOSP_FQNAME "android.hardware.biometrics.fingerprint@2.1::IBiometricsFingerprint"
 
