@@ -35,6 +35,7 @@
 #define SEM_PARAM_RELEASED 1
 
 #define TSP_CMD_PATH "/sys/class/sec/tsp/cmd"
+#define FP_GREEN_CIRCLE "/sys/class/lcd/panel/fp_green_circle"
 #define MASK_BRIGHTNESS_PATH "/sys/class/lcd/panel/mask_brightness"
 
 
